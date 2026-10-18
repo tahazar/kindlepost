@@ -2,5 +2,5 @@ services:
   kindlepost:
     build: .
     restart: unless-stopped
-    ports: ["8080:8080"]
+    ports: ["${HOST_PORT:-8090}:8080"]
     env_file: .env

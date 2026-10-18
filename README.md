@@ -5,25 +5,37 @@ Share an ebook from your iPhone → it's converted with Calibre → your phone e
 The server only converts files. Sending happens from your phone's Mail app, so no email passwords are stored on the server.
 
 ## How it works
-- **EPUB, PDF, DOCX, TXT, RTF, HTML**: Amazon accepts these directly. EPUBs are still round-tripped through Calibre by default, which fixes most "E999" rejections and gives a cover page Amazon renders reliably.
+- **EPUB, DOCX, TXT, RTF, HTML**: Amazon accepts these directly. EPUBs are still round-tripped through Calibre by default, which fixes most "E999" rejections and gives a cover page Amazon renders reliably.
+- **PDF**: converted to EPUB so the text reflows to the Kindle's screen and font size. Plain books convert well; PDFs with columns, tables, or footnotes can come out jumbled. If conversion fails (scanned PDFs, for example), the original PDF is sent instead. Set `PDF_TO_EPUB=0` in `.env` to always send PDFs as they are.
 - **MOBI, AZW3, FB2, CBZ/CBR, LIT, ODT, Markdown, etc.**: converted to EPUB first (Amazon no longer wants MOBI).
 - Results over ~48 MB are refused (Amazon's email limit is 50 MB); use amazon.com/sendtokindle for those.
+
+## Metadata lookup
+For EPUB, PDF, DOCX, and RTF results, the server looks the book up with Calibre's metadata sources (Amazon, Google Books, and others) and writes in the title, authors, series, ISBN, Amazon ASIN, and, for EPUBs, the cover. The returned file is renamed to `Title - Author`.
+
+- The query comes from the `title`/`author` form fields if given, then the book's own metadata, then the file name. File names like `Brown, Dan - Da Vinci Code.pdf` and `(Red Rising Saga) Pierce Brown - Golden Son.epub` are understood.
+- A result is used only if its title and author match the query closely; otherwise the book goes out unchanged. `title`/`author` form fields always win over lookup results.
+- `LOOKUP_TIMEOUT` (seconds, default 20) caps the lookup so the Shortcut doesn't time out.
+- Turn it off with `METADATA_LOOKUP=0` in `.env`, or per request with the form field `lookup` = `0`.
+- Books sent by email stay personal documents on the Kindle even with an ASIN, so store features like Whispersync and X-Ray don't apply.
+- `docker compose logs` shows each lookup and what it matched.
 
 ## Setup
 1. **Approve your sending address**: Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings → add the email account your iPhone's Mail app will send from to the approved list. Note your `@kindle.com` address there too.
 2. `cp .env.example .env` and set `API_TOKEN` (`openssl rand -hex 24`).
-3. `docker compose up -d --build`, then check `curl localhost:8080/health`.
+3. `docker compose up -d --build`, then check `curl localhost:8090/health`.
+   - **On a Mac**: install Docker Desktop or OrbStack, then run `./bootstrap-mac.sh`. It creates `.env` with a random token, builds and starts the container, waits for `/health`, and prints the URLs. Get the token with `docker compose exec kindlepost printenv API_TOKEN`. Set `HOST_PORT` in `.env` to use a port other than 8090. The container restarts with Docker, so set Docker to start at login and stop the Mac sleeping (System Settings → Energy) if your phone should reach it anytime.
 4. **Make it reachable from your phone**: easiest is Tailscale on the server and phone (use the `100.x` IP or MagicDNS name). Alternatively a Cloudflare Tunnel or a small VPS with HTTPS.
 
 Test from a laptop:
 ```sh
-curl -OJ -H "Authorization: Bearer $API_TOKEN" -F file=@book.mobi http://SERVER:8080/convert
+curl -o book.epub -H "Authorization: Bearer $API_TOKEN" -F file=@book.mobi http://SERVER:8090/convert
 ```
 
 ## iOS Shortcut ("Send to Kindle")
 1. New Shortcut → tap the **i** → enable **Show in Share Sheet**; input type **Files**.
 2. **Get Contents of URL**
-   - URL: `http://SERVER:8080/convert`
+   - URL: `http://SERVER:8090/convert`
    - Method: **POST**
    - Headers: `Authorization` = `Bearer YOUR_TOKEN`
    - Request Body: **Form** → field `file`, type **File**, value **Shortcut Input**
@@ -42,4 +54,4 @@ Now in Files, Safari downloads, Mail attachments, etc.: Share → **Send to Kind
 
 **Optional prompts**: add **Ask for Input** actions before step 2 and pass the results as `title` / `author` form fields to override metadata.
 
-There's also a simple upload page at `http://SERVER:8080/` that converts a file and downloads the result.
+There's also a simple upload page at `http://SERVER:8090/` that converts a file and downloads the result.
