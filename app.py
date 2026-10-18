@@ -31,6 +31,8 @@ from starlette.background import BackgroundTask
 # ---- config (env vars) -----------------------------------------------------
 API_TOKEN = os.environ["API_TOKEN"]                    # shared secret for the Shortcut
 NORMALIZE_EPUB = os.environ.get("NORMALIZE_EPUB", "1") == "1"
+# Kindle shows PDFs as fixed pages; EPUB reflows to the screen and font size.
+PDF_TO_EPUB = os.environ.get("PDF_TO_EPUB", "1") == "1"
 MAX_BYTES = 48 * 1024 * 1024                           # Amazon email cap is 50 MB total
 METADATA_LOOKUP = os.environ.get("METADATA_LOOKUP", "1") == "1"
 # The iOS Shortcut gives up on slow requests, so the lookup gets a hard budget.
@@ -92,6 +94,15 @@ def prepare(src: Path, title: str | None, author: str | None) -> Path:
         out.parent.mkdir()
         ebook_convert(src, out, title, author)
         return out
+    if ext == ".pdf" and PDF_TO_EPUB:
+        out = src.with_suffix(".epub")
+        try:
+            ebook_convert(src, out, title, author)
+            return out
+        except HTTPException as e:
+            # Scanned or damaged PDFs can't be converted but Amazon still accepts them.
+            log.warning("pdf: conversion failed for %s, sending the PDF: %s", src.name, e.detail[-200:])
+            out.unlink(missing_ok=True)
     if ext in NATIVE:
         return src
     if ext in CONVERTIBLE:

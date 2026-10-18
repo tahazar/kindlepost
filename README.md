@@ -5,7 +5,8 @@ Share an ebook from your iPhone → it's converted with Calibre → your phone e
 The server only converts files. Sending happens from your phone's Mail app, so no email passwords are stored on the server.
 
 ## How it works
-- **EPUB, PDF, DOCX, TXT, RTF, HTML**: Amazon accepts these directly. EPUBs are still round-tripped through Calibre by default, which fixes most "E999" rejections and gives a cover page Amazon renders reliably.
+- **EPUB, DOCX, TXT, RTF, HTML**: Amazon accepts these directly. EPUBs are still round-tripped through Calibre by default, which fixes most "E999" rejections and gives a cover page Amazon renders reliably.
+- **PDF**: converted to EPUB so the text reflows to the Kindle's screen and font size. Plain books convert well; PDFs with columns, tables, or footnotes can come out jumbled. If conversion fails (scanned PDFs, for example), the original PDF is sent instead. Set `PDF_TO_EPUB=0` in `.env` to always send PDFs as they are.
 - **MOBI, AZW3, FB2, CBZ/CBR, LIT, ODT, Markdown, etc.**: converted to EPUB first (Amazon no longer wants MOBI).
 - Results over ~48 MB are refused (Amazon's email limit is 50 MB); use amazon.com/sendtokindle for those.
 
