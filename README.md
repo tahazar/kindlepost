@@ -12,19 +12,19 @@ The server only converts files. Sending happens from your phone's Mail app, so n
 ## Setup
 1. **Approve your sending address**: Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings → add the email account your iPhone's Mail app will send from to the approved list. Note your `@kindle.com` address there too.
 2. `cp .env.example .env` and set `API_TOKEN` (`openssl rand -hex 24`).
-3. `docker compose up -d --build`, then check `curl localhost:8080/health`.
-   - **On a Mac**: install Docker Desktop or OrbStack, then run `./bootstrap-mac.sh`. It creates `.env` with a random token, builds and starts the container, waits for `/health`, and prints the URLs. Get the token with `docker compose exec kindlepost printenv API_TOKEN`. Set `HOST_PORT` in `.env` if port 8080 is taken. The container restarts with Docker, so set Docker to start at login and stop the Mac sleeping (System Settings → Energy) if your phone should reach it anytime.
+3. `docker compose up -d --build`, then check `curl localhost:8090/health`.
+   - **On a Mac**: install Docker Desktop or OrbStack, then run `./bootstrap-mac.sh`. It creates `.env` with a random token, builds and starts the container, waits for `/health`, and prints the URLs. Get the token with `docker compose exec kindlepost printenv API_TOKEN`. Set `HOST_PORT` in `.env` to use a port other than 8090. The container restarts with Docker, so set Docker to start at login and stop the Mac sleeping (System Settings → Energy) if your phone should reach it anytime.
 4. **Make it reachable from your phone**: easiest is Tailscale on the server and phone (use the `100.x` IP or MagicDNS name). Alternatively a Cloudflare Tunnel or a small VPS with HTTPS.
 
 Test from a laptop:
 ```sh
-curl -OJ -H "Authorization: Bearer $API_TOKEN" -F file=@book.mobi http://SERVER:8080/convert
+curl -o book.epub -H "Authorization: Bearer $API_TOKEN" -F file=@book.mobi http://SERVER:8090/convert
 ```
 
 ## iOS Shortcut ("Send to Kindle")
 1. New Shortcut → tap the **i** → enable **Show in Share Sheet**; input type **Files**.
 2. **Get Contents of URL**
-   - URL: `http://SERVER:8080/convert`
+   - URL: `http://SERVER:8090/convert`
    - Method: **POST**
    - Headers: `Authorization` = `Bearer YOUR_TOKEN`
    - Request Body: **Form** → field `file`, type **File**, value **Shortcut Input**
@@ -43,4 +43,4 @@ Now in Files, Safari downloads, Mail attachments, etc.: Share → **Send to Kind
 
 **Optional prompts**: add **Ask for Input** actions before step 2 and pass the results as `title` / `author` form fields to override metadata.
 
-There's also a simple upload page at `http://SERVER:8080/` that converts a file and downloads the result.
+There's also a simple upload page at `http://SERVER:8090/` that converts a file and downloads the result.

@@ -22,7 +22,7 @@ if [ ! -f .env ]; then
   echo "==> Created .env with a new API_TOKEN"
 fi
 PORT="$(sed -n 's/^HOST_PORT=//p' .env)"
-PORT="${PORT:-8080}"
+PORT="${PORT:-8090}"
 
 echo "==> Building and starting (first build downloads Calibre and takes a few minutes)"
 docker compose up -d --build
