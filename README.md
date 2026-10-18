@@ -13,6 +13,7 @@ The server only converts files. Sending happens from your phone's Mail app, so n
 1. **Approve your sending address**: Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings → add the email account your iPhone's Mail app will send from to the approved list. Note your `@kindle.com` address there too.
 2. `cp .env.example .env` and set `API_TOKEN` (`openssl rand -hex 24`).
 3. `docker compose up -d --build`, then check `curl localhost:8080/health`.
+   - **On a Mac**: install Docker Desktop or OrbStack, then run `./bootstrap-mac.sh`. It creates `.env` with a random token, builds and starts the container, waits for `/health`, and prints the URLs. Get the token with `docker compose exec kindlepost printenv API_TOKEN`. Set `HOST_PORT` in `.env` if port 8080 is taken. The container restarts with Docker, so set Docker to start at login and stop the Mac sleeping (System Settings → Energy) if your phone should reach it anytime.
 4. **Make it reachable from your phone**: easiest is Tailscale on the server and phone (use the `100.x` IP or MagicDNS name). Alternatively a Cloudflare Tunnel or a small VPS with HTTPS.
 
 Test from a laptop:
