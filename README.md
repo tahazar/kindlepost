@@ -9,6 +9,16 @@ The server only converts files. Sending happens from your phone's Mail app, so n
 - **MOBI, AZW3, FB2, CBZ/CBR, LIT, ODT, Markdown, etc.**: converted to EPUB first (Amazon no longer wants MOBI).
 - Results over ~48 MB are refused (Amazon's email limit is 50 MB); use amazon.com/sendtokindle for those.
 
+## Metadata lookup
+For EPUB, PDF, DOCX, and RTF results, the server looks the book up with Calibre's metadata sources (Amazon, Google Books, and others) and writes in the title, authors, series, ISBN, Amazon ASIN, and, for EPUBs, the cover. The returned file is renamed to `Title - Author`.
+
+- The query comes from the `title`/`author` form fields if given, then the book's own metadata, then the file name. File names like `Brown, Dan - Da Vinci Code.pdf` and `(Red Rising Saga) Pierce Brown - Golden Son.epub` are understood.
+- A result is used only if its title and author match the query closely; otherwise the book goes out unchanged. `title`/`author` form fields always win over lookup results.
+- `LOOKUP_TIMEOUT` (seconds, default 20) caps the lookup so the Shortcut doesn't time out.
+- Turn it off with `METADATA_LOOKUP=0` in `.env`, or per request with the form field `lookup` = `0`.
+- Books sent by email stay personal documents on the Kindle even with an ASIN, so store features like Whispersync and X-Ray don't apply.
+- `docker compose logs` shows each lookup and what it matched.
+
 ## Setup
 1. **Approve your sending address**: Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings → add the email account your iPhone's Mail app will send from to the approved list. Note your `@kindle.com` address there too.
 2. `cp .env.example .env` and set `API_TOKEN` (`openssl rand -hex 24`).
