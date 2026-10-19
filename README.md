@@ -28,6 +28,8 @@ kindlepost runs in [Docker](https://www.docker.com) on any computer that stays o
 
 ### 1. Find your Kindle address and approve your email
 
+Amazon's [Send to Kindle by email](https://www.amazon.com/sendtokindle/email) page covers this step in full, including the file types and sizes Amazon accepts.
+
 1. Go to amazon.com → **Account & Lists → Content Library → Preferences** (on some Amazon sites: **Manage Your Content and Devices → Preferences**).
 2. Under **Personal Document Settings**, find your Kindle's email address. It ends in `@kindle.com`.
 3. On the same page, under **Approved Personal Document E-mail List**, add the email address the iPhone's Mail app sends from. Amazon ignores mail from any other address.
