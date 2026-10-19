@@ -85,25 +85,27 @@ If something else already uses `tailscale serve` on this computer, give kindlepo
 
 In the Shortcuts app, create a new Shortcut named **Send to Kindle**:
 
-1. Tap the **ⓘ** button, turn on **Show in Share Sheet**, and set the accepted input to **Files** only.
+1. Tap the **ⓘ** button, turn on **Show in Share Sheet**, and set the accepted input to **Files**.
 2. Add **Get Contents of URL**. Tap the arrow next to the URL to show its options:
    - URL: `https://SERVER/convert`
    - Method: **POST**
-   - Headers: one header, key `Authorization`, value `Bearer ` followed by the token (paste it; a typo or trailing space gives a "bad token" error). Delete any empty header rows; an empty header makes the request fail with "The network connection was lost".
-   - Request Body: **Form**. Add a field of type **File** (not Text), key `file`, value **Shortcut Input**. Tap the **Shortcut Input** variable and check that nothing is ticked under **Get**; if **Name** is ticked, only the file name is sent.
+   - Headers: tap **Add new header**. Key `Authorization`, value `Bearer ` followed by the token. Paste the token; a typo or trailing space gives a "bad token" error. Leave no empty header rows.
+   - Request Body: **Form**. Tap **Add new field** and choose **File**. Tap **Choose** and pick **Shortcut Input**, then type `file` as the key. The finished row shows only the key, `file`.
 
-   <img src="docs/images/empty-header-row.png" width="320" alt="Get Contents of URL with an empty Key/Text header row below the Authorization header, and the error 'The network connection was lost'">
-   <img src="docs/images/shortcut-input-name-ticked.png" width="320" alt="Shortcut Input variable settings with Type set to File and Name ticked under Get">
+   <img src="docs/images/get-contents-of-url.png" width="320" alt="Get Contents of URL set to POST https://{YOUR_SERVER}/convert with an Authorization header and a form field named file">
 
-   Left: the empty **Key / Text** header row under **Authorization** causes "The network connection was lost"; delete it. Right: **Name** is ticked under **Get**, so only the file name is sent; untick it.
+   <img src="docs/images/add-file-field.png" width="320" alt="Add new field menu with the options Text and File">
+   <img src="docs/images/choose-shortcut-input.png" width="320" alt="Choose menu listing Clipboard, Current App, Current Date, Device Details and Shortcut Input">
 3. Add **Get Details of Files**, set to **File Extension** of **Contents of URL**.
 4. Add **If** *File Extension* **is** `json`. Inside it, add **Show Result** with **Contents of URL**, then **Stop This Shortcut**. Errors come back as JSON, so this shows the error instead of emailing it.
 5. After **End If**, add **Send Email**:
+   - Message: the **Contents of URL** variable. This is the file kindlepost returned. **Shortcut Input** would email the original, unconverted book.
    - Recipient: your `@kindle.com` address
    - From: the address you approved in step 1
-   - Message: the **Contents of URL** variable. Tap it and check that its type is **File** and nothing is ticked under **Get**, or the email arrives without an attachment.
-   - Turn **Show Compose Sheet** off to send without a confirmation screen. Leave it on the first time to check that the book is attached.
-6. Optionally add **Show Notification** with the text "Sent to Kindle".
+   - Turn **Show Compose Sheet** off to send without a confirmation screen. Leave it on the first time to check that the book is attached and its name has changed to `Title - Author`.
+6. Optionally add **Show Notification**.
+
+   <img src="docs/images/send-email.png" width="320" alt="If File Extension is json, Show Contents of URL, Stop this shortcut, End If, Send Contents of URL to a kindle.com address, Show notification">
 
 ### 5. Send a book
 
@@ -183,14 +185,20 @@ Errors return JSON such as `{"detail":"bad token"}` with one of these status cod
 
 | Problem | Fix |
 |---|---|
-| Shortcut shows "The network connection was lost" | Delete any empty header rows in **Get Contents of URL** (see the screenshot in step 4). Check that Tailscale is connected on the phone and the server computer is awake. Download cloud files to the phone before sharing them. |
+| Shortcut shows "The network connection was lost" | Delete any empty header rows in **Get Contents of URL** (first screenshot below). Check that Tailscale is connected on the phone and the server computer is awake. Download cloud files to the phone before sharing them. |
 | `{"detail":"bad token"}` | The token in the Shortcut doesn't match the server's. Copy it again with `docker compose exec kindlepost printenv API_TOKEN` and paste it after `Bearer `. If `.env` was edited, run `docker compose up -d --force-recreate`. |
-| `Expected UploadFile, received: <class 'str'>` | The form field `file` is a Text field, or **Name** is ticked on the Shortcut Input variable. Recreate it as a **File** field with nothing ticked under **Get** (see the screenshot in step 4). |
+| `Expected UploadFile, received: <class 'str'>` | The form field `file` is a Text field, or **Name** is ticked on the Shortcut Input variable. Recreate it as a **File** field (step 4). If the field shows **Shortcut Input**, tap it and untick everything under **Get** (second screenshot below). |
 | Email arrives without an attachment | In **Send Email**, tap the **Contents of URL** variable, set its type to **File**, and untick everything under **Get**. |
+| Books arrive with their original file name, title and format (PDFs stay PDFs) | **Send Email** is attaching **Shortcut Input**, the book as shared. Replace it with **Contents of URL**. |
 | Email sent, but the book never appears | The sending address isn't on Amazon's approved list, or the book is over 50 MB. Amazon emails the sender when it rejects a document. |
 | The phone shows a different website at the server's address | Another program is listening on the same port. On the server, run `lsof -nP -iTCP:8090 -sTCP:LISTEN`. Set a free port as `HOST_PORT` in `.env`, run `docker compose up -d --force-recreate`, and point `tailscale serve` at the new port. |
 | Wrong title, author or cover | Send the book again with `title` and `author` set (see **Book details lookup**), or with `lookup` set to `0`. |
 | Anything else | `docker compose logs -f` shows each request and lookup as it happens. |
+
+<img src="docs/images/empty-header-row.png" width="320" alt="Get Contents of URL with an empty Key/Text header row below the Authorization header, and the error 'The network connection was lost'">
+<img src="docs/images/shortcut-input-name-ticked.png" width="320" alt="Shortcut Input variable settings with Type set to File and Name ticked under Get">
+
+Left: an empty **Key / Text** header row under **Authorization**, which causes "The network connection was lost". Right: **Name** ticked under **Get**, which sends only the file name.
 
 ## Updating and stopping
 
