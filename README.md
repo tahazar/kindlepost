@@ -1,57 +1,209 @@
 # kindlepost
 
-Share an ebook from your iPhone → it's converted with Calibre → your phone emails it to your Kindle.
+Send ebooks from an iPhone to a Kindle from the share sheet.
 
-The server only converts files. Sending happens from your phone's Mail app, so no email passwords are stored on the server.
+Every Kindle has its own email address, and Amazon delivers anything mailed to it from an approved sender to that Kindle. Amazon only accepts some formats, and books often arrive with the wrong title, the wrong author, or no cover. kindlepost is a small server that fixes the file before it is mailed: it converts it to a format Amazon accepts, looks up the correct title, author, series and cover, and hands the result back to the phone. An iOS Shortcut then emails it from the phone's Mail app.
+
+The server never sends email and stores no email passwords. It keeps no copies of books; each upload is deleted once the converted file is returned.
 
 ## How it works
-- **EPUB, DOCX, TXT, RTF, HTML**: Amazon accepts these directly. EPUBs are still round-tripped through Calibre by default, which fixes most "E999" rejections and gives a cover page Amazon renders reliably.
-- **PDF**: converted to EPUB so the text reflows to the Kindle's screen and font size. Plain books convert well; PDFs with columns, tables, or footnotes can come out jumbled. If conversion fails (scanned PDFs, for example), the original PDF is sent instead. Set `PDF_TO_EPUB=0` in `.env` to always send PDFs as they are.
-- **MOBI, AZW3, FB2, CBZ/CBR, LIT, ODT, Markdown, etc.**: converted to EPUB first (Amazon no longer wants MOBI).
-- Results over ~48 MB are refused (Amazon's email limit is 50 MB); use amazon.com/sendtokindle for those.
 
-## Metadata lookup
-For EPUB, PDF, DOCX, and RTF results, the server looks the book up with Calibre's metadata sources (Amazon, Google Books, and others) and writes in the title, authors, series, ISBN, Amazon ASIN, and, for EPUBs, the cover. The returned file is renamed to `Title - Author`.
+1. In the Files app, Safari, Mail or any other app, tap **Share → Send to Kindle** on an ebook.
+2. The **Send to Kindle** Shortcut uploads the file to kindlepost.
+3. kindlepost converts the file with [Calibre](https://calibre-ebook.com) (an open-source ebook converter), fills in the book's details, and returns the new file.
+4. The Shortcut emails the file to your `@kindle.com` address.
+5. The book appears in the Kindle library a few minutes later.
 
-- The query comes from the `title`/`author` form fields if given, then the book's own metadata, then the file name. File names like `Brown, Dan - Da Vinci Code.pdf` and `(Red Rising Saga) Pierce Brown - Golden Son.epub` are understood.
-- A result is used only if its title and author match the query closely; otherwise the book goes out unchanged. `title`/`author` form fields always win over lookup results.
-- `LOOKUP_TIMEOUT` (seconds, default 20) caps the lookup so the Shortcut doesn't time out.
-- Turn it off with `METADATA_LOOKUP=0` in `.env`, or per request with the form field `lookup` = `0`.
-- Books sent by email stay personal documents on the Kindle even with an ASIN, so store features like Whispersync and X-Ray don't apply.
-- `docker compose logs` shows each lookup and what it matched.
+kindlepost runs in [Docker](https://www.docker.com) on any computer that stays on: a Mac, a Linux box, a NAS, or a cloud server. The phone reaches it over [Tailscale](https://tailscale.com), a free private network between your own devices, so the server is never exposed to the internet.
+
+## What you need
+
+- An iPhone or iPad with the Shortcuts app
+- A Kindle or the Kindle app, and access to the Amazon account it is registered to
+- An email account set up in the iPhone's Mail app
+- A computer that can run Docker and stays on when you want to send books
+- A free Tailscale account
 
 ## Setup
-1. **Approve your sending address**: Amazon → Manage Your Content and Devices → Preferences → Personal Document Settings → add the email account your iPhone's Mail app will send from to the approved list. Note your `@kindle.com` address there too.
-2. `cp .env.example .env` and set `API_TOKEN` (`openssl rand -hex 24`).
-3. `docker compose up -d --build`, then check `curl localhost:8090/health`.
-   - **On a Mac**: install Docker Desktop or OrbStack, then run `./bootstrap-mac.sh`. It creates `.env` with a random token, builds and starts the container, waits for `/health`, and prints the URLs. Get the token with `docker compose exec kindlepost printenv API_TOKEN`. Set `HOST_PORT` in `.env` to use a port other than 8090. The container restarts with Docker, so set Docker to start at login and stop the Mac sleeping (System Settings → Energy) if your phone should reach it anytime.
-4. **Make it reachable from your phone**: easiest is Tailscale on the server and phone (use the `100.x` IP or MagicDNS name). Alternatively a Cloudflare Tunnel or a small VPS with HTTPS.
 
-Test from a laptop:
+### 1. Find your Kindle address and approve your email
+
+Amazon's [Send to Kindle by email](https://www.amazon.com/sendtokindle/email) page covers this step in full, including the file types and sizes Amazon accepts.
+
+1. Go to amazon.com → **Account & Lists → Content Library → Preferences** (on some Amazon sites: **Manage Your Content and Devices → Preferences**).
+2. Under **Personal Document Settings**, find your Kindle's email address. It ends in `@kindle.com`.
+3. On the same page, under **Approved Personal Document E-mail List**, add the email address the iPhone's Mail app sends from. Amazon ignores mail from any other address.
+
+### 2. Run the server
+
+**On a Mac:**
+
+1. Install [OrbStack](https://orbstack.dev) or [Docker Desktop](https://www.docker.com/products/docker-desktop/) and open it once.
+2. Run:
+   ```sh
+   git clone https://github.com/tahazar/kindlepost.git
+   cd kindlepost
+   ./bootstrap-mac.sh
+   ```
+   The first run creates a `.env` settings file with a random access token, builds the server (a few minutes, mostly downloading Calibre), starts it, and prints its addresses. Running the script again rebuilds and restarts the server.
+3. In OrbStack or Docker Desktop settings, turn on starting at login. In **System Settings → Energy**, stop the Mac from sleeping, or the phone can't reach the server.
+
+**On any other computer with Docker:**
+
 ```sh
-curl -o book.epub -H "Authorization: Bearer $API_TOKEN" -F file=@book.mobi http://SERVER:8090/convert
+git clone https://github.com/tahazar/kindlepost.git
+cd kindlepost
+cp .env.example .env
+sed -i "s/^API_TOKEN=.*/API_TOKEN=$(openssl rand -hex 24)/" .env
+docker compose up -d --build
 ```
 
-## iOS Shortcut ("Send to Kindle")
-1. New Shortcut → tap the **i** → enable **Show in Share Sheet**; input type **Files**.
-2. **Get Contents of URL**
-   - URL: `http://SERVER:8090/convert`
+**Check it:** `curl localhost:8090/health` should print `{"ok":true}`.
+
+**Get the access token** (needed for the Shortcut):
+
+```sh
+docker compose exec kindlepost printenv API_TOKEN
+```
+
+Anyone with this token and network access to the server can use it to convert files, so keep it out of screenshots, chats and shared notes. To replace it, put a new value in `.env` (`openssl rand -hex 24`), run `docker compose up -d --force-recreate`, and paste the new token into the Shortcut.
+
+### 3. Reach the server from your phone
+
+1. Install Tailscale on the server computer and on the iPhone, and sign in to the same account on both.
+2. On the server, run:
+   ```sh
+   tailscale serve --bg 8090
+   ```
+   The first time, Tailscale may open its admin page and ask you to enable HTTPS certificates; enable them.
+3. Run `tailscale serve status`. It shows an address like `https://my-mac.tailnet-name.ts.net`. This is the server's address from the phone; the rest of this guide calls it `SERVER`.
+4. With Tailscale connected on the iPhone, open `https://SERVER/health` in Safari. It should show `{"ok":true}`.
+
+If something else already uses `tailscale serve` on this computer, give kindlepost its own HTTPS port instead: `tailscale serve --bg --https=8443 8090`, and use `https://SERVER:8443` everywhere below.
+
+### 4. Build the Shortcut
+
+In the Shortcuts app, create a new Shortcut named **Send to Kindle**:
+
+1. Tap the **ⓘ** button, turn on **Show in Share Sheet**, and set the accepted input to **Files**.
+2. Add **Get Contents of URL**. Tap the arrow next to the URL to show its options:
+   - URL: `https://SERVER/convert`
    - Method: **POST**
-   - Headers: `Authorization` = `Bearer YOUR_TOKEN`
-   - Request Body: **Form** → field `file`, type **File**, value **Shortcut Input**
-3. **Get Details of Files** → **File Extension** of *Contents of URL*.
-4. **If** *File Extension* **is** `json` → **Show Result** (*Contents of URL*) → **Stop This Shortcut** → **End If**. (Errors come back as JSON, so this stops a failed conversion from being emailed.)
-5. **Send Email**
-   - Recipients: `yourname@kindle.com`
-   - From: the approved account
-   - Attachment / body: *Contents of URL*
-   - Turn **Show Compose Sheet** off to send without tapping
-6. **Show Notification**: "Sent to Kindle".
+   - Headers: tap **Add new header**. Key `Authorization`, value `Bearer ` followed by the token. Paste the token; a typo or trailing space gives a "bad token" error. Leave no empty header rows.
+   - Request Body: **Form**. Tap **Add new field** and choose **File**. Tap **Choose** and pick **Shortcut Input**, then type `file` as the key. The finished row shows only the key, `file`.
 
-Now in Files, Safari downloads, Mail attachments, etc.: Share → **Send to Kindle**.
+   <img src="docs/images/get-contents-of-url.png" width="320" alt="Get Contents of URL set to POST https://{YOUR_SERVER}/convert with an Authorization header and a form field named file">
 
-**Link variant**: duplicate the shortcut, point it at `/convert-url`, and make the form field `url` (Text) = Shortcut Input.
+   <img src="docs/images/add-file-field.png" width="320" alt="Add new field menu with the options Text and File">
+   <img src="docs/images/choose-shortcut-input.png" width="320" alt="Choose menu listing Clipboard, Current App, Current Date, Device Details and Shortcut Input">
+3. Add **Get Details of Files**, set to **File Extension** of **Contents of URL**.
+4. Add **If** *File Extension* **is** `json`. Inside it, add **Show Result** with **Contents of URL**, then **Stop This Shortcut**. Errors come back as JSON, so this shows the error instead of emailing it.
+5. After **End If**, add **Send Email**:
+   - Message: the **Contents of URL** variable. This is the file kindlepost returned. **Shortcut Input** would email the original, unconverted book.
+   - Recipient: your `@kindle.com` address
+   - From: the address you approved in step 1
+   - Turn **Show Compose Sheet** off to send without a confirmation screen. Leave it on the first time to check that the book is attached and its name has changed to `Title - Author`.
+6. Optionally add **Show Notification**.
 
-**Optional prompts**: add **Ask for Input** actions before step 2 and pass the results as `title` / `author` form fields to override metadata.
+   <img src="docs/images/send-email.png" width="320" alt="If File Extension is json, Show Contents of URL, Stop this shortcut, End If, Send Contents of URL to a kindle.com address, Show notification">
 
-There's also a simple upload page at `http://SERVER:8090/` that converts a file and downloads the result.
+### 5. Send a book
+
+With Tailscale connected on the phone, open a book in Files (or Safari downloads, Mail attachments, and so on) and tap **Share → Send to Kindle**. Files stored in OneDrive, iCloud Drive or Dropbox must be downloaded to the phone first.
+
+## What happens to each file type
+
+| File | Result |
+|---|---|
+| EPUB | Rebuilt with Calibre, which fixes most books Amazon would otherwise reject with an "E999" error |
+| PDF | Converted to EPUB so the text adjusts to the Kindle's screen and font size. If conversion fails, as with scanned PDFs, the original PDF is sent. |
+| DOCX, TXT, RTF, HTML | Sent as they are; Amazon converts these itself |
+| MOBI, AZW, AZW3, FB2, LIT, ODT, CBZ, CBR, Markdown, and other formats Calibre reads | Converted to EPUB |
+
+Plain novels convert well from PDF. PDFs with columns, tables, footnotes or complex layouts can come out jumbled; set `PDF_TO_EPUB=0` to always send PDFs unchanged.
+
+Amazon rejects emails over 50 MB, so kindlepost refuses results over 48 MB. Send larger books through [amazon.com/sendtokindle](https://www.amazon.com/sendtokindle).
+
+## Book details lookup
+
+For EPUB, PDF, DOCX and RTF results, kindlepost searches online book databases (Amazon, Google Books and others, through Calibre) and writes the correct title, authors, series and number, ISBN, Amazon ASIN and, for EPUBs, the cover into the file. The emailed file is named `Title - Author`.
+
+- The search uses the `title` and `author` sent with the request if there are any, then the details already inside the book, then the file name. File names such as `Brown, Dan - Da Vinci Code.pdf` and `(Red Rising Saga) Pierce Brown - Golden Son.epub` are understood.
+- A result is applied only when its title and author closely match the search. Otherwise the book is sent with its original details.
+- The search stops after 20 seconds (`LOOKUP_TIMEOUT`) so the Shortcut doesn't time out.
+- A book emailed to a Kindle is always a personal document, even with an ASIN, so store features such as Whispersync and X-Ray are not available for it.
+- `docker compose logs | grep lookup` shows what each book matched.
+
+To set a title and author yourself, add two **Ask for Input** actions before **Get Contents of URL** and send their answers as Text form fields named `title` and `author`. These always override the lookup.
+
+## Settings
+
+Settings live in `.env` in the kindlepost folder. After changing one, run `docker compose up -d --force-recreate`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `API_TOKEN` | random | Token the Shortcut must send. Required. |
+| `HOST_PORT` | `8090` | Port the server listens on. Change it if another program uses 8090, and use the new port in the `tailscale serve` command. |
+| `NORMALIZE_EPUB` | `1` | `1` rebuilds every EPUB with Calibre; `0` sends EPUBs unchanged unless a title or author is set. |
+| `PDF_TO_EPUB` | `1` | `1` converts PDFs to EPUB; `0` sends PDFs unchanged. |
+| `METADATA_LOOKUP` | `1` | `1` looks up book details; `0` turns the lookup off. |
+| `LOOKUP_TIMEOUT` | `20` | Seconds the lookup may take. |
+
+## Other ways to send
+
+- **Web page:** `https://SERVER/` has an upload form that converts a file and downloads the result.
+- **Links:** duplicate the Shortcut, set accepted input to **URLs**, change the URL to `https://SERVER/convert-url`, and replace the `file` field with a Text field `url` set to **Shortcut Input**. Sharing a direct download link then sends that book.
+- **Command line:**
+  ```sh
+  curl -o book.epub -H "Authorization: Bearer $TOKEN" -F file=@book.mobi https://SERVER/convert
+  ```
+
+## API
+
+All requests except `/` and `/health` need the header `Authorization: Bearer <token>`.
+
+| Request | Fields | Response |
+|---|---|---|
+| `POST /convert` | `file` (file, required); `title`, `author`, `lookup` (text, optional) | The converted file |
+| `POST /convert-url` | `url` (text, required); `title`, `author`, `lookup` (text, optional) | The converted file |
+| `GET /health` | | `{"ok":true}` when Calibre is installed |
+| `GET /` | | Upload page |
+
+`lookup` set to `0` skips the book details lookup for that request; `1` forces it on.
+
+Errors return JSON such as `{"detail":"bad token"}` with one of these status codes:
+
+| Code | Cause |
+|---|---|
+| 400 | Empty file, or a link that is not `http(s)` or could not be downloaded |
+| 401 | Missing or wrong token |
+| 413 | Result over 48 MB |
+| 415 | File type Calibre can't read |
+| 422 | Calibre could not convert the file |
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| Shortcut shows "The network connection was lost" | Delete any empty header rows in **Get Contents of URL** (first screenshot below). Check that Tailscale is connected on the phone and the server computer is awake. Download cloud files to the phone before sharing them. |
+| `{"detail":"bad token"}` | The token in the Shortcut doesn't match the server's. Copy it again with `docker compose exec kindlepost printenv API_TOKEN` and paste it after `Bearer `. If `.env` was edited, run `docker compose up -d --force-recreate`. |
+| `Expected UploadFile, received: <class 'str'>` | The form field `file` is a Text field, or **Name** is ticked on the Shortcut Input variable. Recreate it as a **File** field (step 4). If the field shows **Shortcut Input**, tap it and untick everything under **Get** (second screenshot below). |
+| Email arrives without an attachment | In **Send Email**, tap the **Contents of URL** variable, set its type to **File**, and untick everything under **Get**. |
+| Books arrive with their original file name, title and format (PDFs stay PDFs) | **Send Email** is attaching **Shortcut Input**, the book as shared. Replace it with **Contents of URL**. |
+| Email sent, but the book never appears | The sending address isn't on Amazon's approved list, or the book is over 50 MB. Amazon emails the sender when it rejects a document. |
+| The phone shows a different website at the server's address | Another program is listening on the same port. On the server, run `lsof -nP -iTCP:8090 -sTCP:LISTEN`. Set a free port as `HOST_PORT` in `.env`, run `docker compose up -d --force-recreate`, and point `tailscale serve` at the new port. |
+| Wrong title, author or cover | Send the book again with `title` and `author` set (see **Book details lookup**), or with `lookup` set to `0`. |
+| Anything else | `docker compose logs -f` shows each request and lookup as it happens. |
+
+<img src="docs/images/empty-header-row.png" width="320" alt="Get Contents of URL with an empty Key/Text header row below the Authorization header, and the error 'The network connection was lost'">
+<img src="docs/images/shortcut-input-name-ticked.png" width="320" alt="Shortcut Input variable settings with Type set to File and Name ticked under Get">
+
+Left: an empty **Key / Text** header row under **Authorization**, which causes "The network connection was lost". Right: **Name** ticked under **Get**, which sends only the file name.
+
+## Updating and stopping
+
+```sh
+git pull
+docker compose up -d --build   # update and restart
+docker compose down            # stop
+```
